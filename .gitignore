@@ -1,0 +1,17 @@
+# Virtual Environment
+venv/
+.venv/
+env/
+
+# Environment Variables
+.env
+
+# Python Bytecode & Cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.log
+
+# Temp files
+*.tmp
+enhanced_*

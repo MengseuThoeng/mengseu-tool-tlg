@@ -1,7 +1,10 @@
 import io
+import os
 import sys
 import logging
 import uuid
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from typing import Dict, Any
 
 if sys.platform == "win32":
@@ -50,6 +53,38 @@ MAX_SESSIONS = 100
 def get_user_lang(user_id: int) -> str:
     """Retrieve user language preference, default to Khmer (km)."""
     return USER_LANG.get(user_id, "km")
+
+
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    """Lightweight HTTP server to satisfy Render / cloud port binding checks."""
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/plain; charset=utf-8")
+        self.end_headers()
+        self.wfile.write(b"Telegram Image Enhancer Bot is alive and running!")
+
+    def do_HEAD(self):
+        self.send_response(200)
+        self.end_headers()
+
+    def log_message(self, format, *args):
+        # Keep logs clean
+        return
+
+
+def start_health_server():
+    """Run health server in background daemon thread."""
+    port_str = os.environ.get("PORT", "10000")
+    try:
+        port = int(port_str)
+    except ValueError:
+        port = 10000
+    try:
+        server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+        logger.info(f"🌐 Cloud health check server listening on port {port}")
+        server.serve_forever()
+    except Exception as e:
+        logger.warning(f"Could not bind health check server on port {port}: {e}")
 
 
 def cleanup_old_sessions():
@@ -391,6 +426,10 @@ def main():
     app.add_handler(CallbackQueryHandler(handle_lang_callback, pattern="^setlang:"))
     app.add_handler(CallbackQueryHandler(handle_callback_query, pattern="^enh:"))
     app.add_handler(CallbackQueryHandler(handle_reset_query, pattern="^reset:"))
+
+    # Launch background health check server for Render port detection
+    health_thread = threading.Thread(target=start_health_server, daemon=True)
+    health_thread.start()
 
     print("🤖 Bot is now polling for messages! Press Ctrl+C to stop.")
     app.run_polling()

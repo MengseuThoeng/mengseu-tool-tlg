@@ -45,9 +45,18 @@ logger = logging.getLogger("ImageEnhancerBot")
 # User language preferences: {user_id: "km" | "en"}, default is "km" (Khmer)
 USER_LANG: Dict[int, str] = {}
 
+# Special VIP users (Liza)
+GF_USER_IDS = {1551315677, 810169056, "1551315677", "810169056"}
+
+
 # In-memory storage for active sessions: {session_id: {"bytes": ..., "lang": ...}}
 SESSIONS: Dict[str, Dict[str, Any]] = {}
 MAX_SESSIONS = 100
+
+
+def is_gf(user_id: int) -> bool:
+    """Check if user is Liza (VIP Girlfriend)."""
+    return user_id in GF_USER_IDS or str(user_id) in GF_USER_IDS
 
 
 def get_user_lang(user_id: int) -> str:
@@ -130,7 +139,17 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /start command."""
     user_id = update.effective_user.id
     lang = get_user_lang(user_id)
-    welcome_text = get_text(lang, "welcome")
+    
+    if is_gf(user_id):
+        welcome_text = (
+            "👋 **សួស្តីមនុស្សពិសេសរបស់ Mengseu!** 🥰💖\n\n"
+            "ទោះបីជាអូនស្អាត និងច្បាស់ក្នុងបេះដូងបង ២៤ ម៉ោងទៅហើយក្តី ក៏បងនៅតែបង្កើត Bot នេះឡើងសម្រាប់តែអូន Liza ម្នាក់គត់! ✨🌸\n\n"
+            "ផ្ញើរូបភាពមកណាអូនសម្លាញ់ ចាំបងជួយកែឱ្យកាន់តែស្អាតភ្លឺថ្លាដូចទេពអប្សរ! 💕\n\n"
+            "*(Bot នេះបង្កើតឡើងដោយបេះដូងរបស់ Mengseu សម្រាប់ Liza)* ❤️"
+        )
+    else:
+        welcome_text = get_text(lang, "welcome")
+
     await update.message.reply_text(welcome_text, parse_mode=ParseMode.MARKDOWN)
 
 
@@ -138,7 +157,17 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /help command."""
     user_id = update.effective_user.id
     lang = get_user_lang(user_id)
-    help_text = get_text(lang, "help")
+    
+    if is_gf(user_id):
+        help_text = (
+            "💡 **សៀវភៅណែនាំបេះដូងសម្រាប់អូន Liza:** 💖\n\n"
+            "• អូនមិនបាច់ខ្វល់រឿងបច្ចេកទេសច្រើនទេ គ្រាន់តែបោះរូបមក បង Mengseu ចាត់ការឱ្យទាំងអស់! 🥰\n"
+            "• ជ្រើសរើស **Real-ESRGAN** បើចង់បានរូបច្បាស់ខ្លាំងដូចកាមេរ៉ាពាន់ដុល្លារ\n"
+            "• ចង់កែប៉ុន្មានរូបក៏បានដែរ ព្រោះអូនជាម្ចាស់បេះដូង Admin! 🔐❤️"
+        )
+    else:
+        help_text = get_text(lang, "help")
+
     await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN)
 
 
@@ -180,7 +209,8 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await message.reply_text(get_text(lang, "too_large", max_size=MAX_IMAGE_SIZE_MB))
         return
 
-    status_msg = await message.reply_text(get_text(lang, "receiving_photo"), parse_mode=ParseMode.MARKDOWN)
+    status_text = "📥 *កំពុងទទួលយករូបថតមនុស្សស្អាតរបស់បង...* 🌸" if is_gf(user_id) else get_text(lang, "receiving_photo")
+    status_msg = await message.reply_text(status_text, parse_mode=ParseMode.MARKDOWN)
     
     try:
         file = await photo.get_file(read_timeout=60, write_timeout=60)
@@ -195,13 +225,21 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "lang": lang
         }
 
-        caption = get_text(
-            lang,
-            "photo_received",
-            width=photo.width,
-            height=photo.height,
-            size_kb=round(len(photo_bytes) / 1024, 1)
-        )
+        if is_gf(user_id):
+            caption = (
+                f"🖼️ **បានទទួលរូបថតអូន Liza រួចរាល់ហើយ!** ✨\n"
+                f"• **ទំហំ:** `{photo.width} × {photo.height}` px | `{round(len(photo_bytes)/1024, 1)} KB`\n\n"
+                f"មនុស្សស្អីក៏ស្អាតយ៉ាងនេះ! តែចាំបង Mengseu ជួយកែឱ្យកាន់តែភ្លឺថ្លា និងច្បាស់ស្អាតឡើងថែមទៀតណា៎! 🥰💖\n\n"
+                f"👇 *ជ្រើសរើសជម្រើសដែលអូនស្រលាញ់មក:*"
+            )
+        else:
+            caption = get_text(
+                lang,
+                "photo_received",
+                width=photo.width,
+                height=photo.height,
+                size_kb=round(len(photo_bytes) / 1024, 1)
+            )
 
         await status_msg.edit_text(
             caption,
@@ -210,7 +248,8 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     except Exception as e:
         logger.exception("Error receiving photo:")
-        await status_msg.edit_text(get_text(lang, "error", err=str(e)), parse_mode=ParseMode.MARKDOWN)
+        err_msg = "🥺 មិនអីទេណាអូន Liza សាកល្បងផ្ញើម្តងទៀតមកណា៎! 💕" if is_gf(user_id) else get_text(lang, "error", err=str(e))
+        await status_msg.edit_text(err_msg, parse_mode=ParseMode.MARKDOWN)
 
 
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -235,7 +274,8 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await message.reply_text(get_text(lang, "too_large", max_size=MAX_IMAGE_SIZE_MB))
         return
 
-    status_msg = await message.reply_text(get_text(lang, "receiving_doc"), parse_mode=ParseMode.MARKDOWN)
+    status_text = "📥 *កំពុងទទួលយកឯកសារច្បាស់ពីមនុស្សស្អាត...* 🌸" if is_gf(user_id) else get_text(lang, "receiving_doc")
+    status_msg = await message.reply_text(status_text, parse_mode=ParseMode.MARKDOWN)
 
     try:
         file = await doc.get_file(read_timeout=60, write_timeout=60)
@@ -250,12 +290,20 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "lang": lang
         }
 
-        caption = get_text(
-            lang,
-            "doc_received",
-            filename=doc.file_name,
-            size_kb=round(len(file_bytes) / 1024, 1)
-        )
+        if is_gf(user_id):
+            caption = (
+                f"📁 **បានទទួលឯកសារច្បាស់ពីអូន Liza រួចរាល់!** ✨\n"
+                f"• **ឈ្មោះ:** `{doc.file_name}` | `{round(len(file_bytes)/1024, 1)} KB`\n\n"
+                f"រូបដើមស្អាតស្រាប់ហើយ តែចាំបងកែឱ្យច្បាស់ត្រជាក់ភ្នែកដូចរូបតារា! 🥰💕\n\n"
+                f"👇 *ជ្រើសរើសជម្រើសខាងក្រោមមកអូនសម្លាញ់:*"
+            )
+        else:
+            caption = get_text(
+                lang,
+                "doc_received",
+                filename=doc.file_name,
+                size_kb=round(len(file_bytes) / 1024, 1)
+            )
 
         await status_msg.edit_text(
             caption,
@@ -264,7 +312,8 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     except Exception as e:
         logger.exception("Error receiving document:")
-        await status_msg.edit_text(get_text(lang, "error", err=str(e)), parse_mode=ParseMode.MARKDOWN)
+        err_msg = "🥺 មិនអីទេណាអូន Liza សាកល្បងផ្ញើម្តងទៀតមកណា៎! 💕" if is_gf(user_id) else get_text(lang, "error", err=str(e))
+        await status_msg.edit_text(err_msg, parse_mode=ParseMode.MARKDOWN)
 
 
 async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -284,18 +333,21 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
     lang = session.get("lang") if session else get_user_lang(user_id)
 
     if not session:
-        await query.edit_message_text(
-            get_text(lang, "expired"),
-            reply_markup=None
-        )
+        expired_msg = "⚠️ សម័យកាលផុតកំណត់ហើយអូនសម្លាញ់ សូមផ្ញើរូបភាពម្តងទៀតណា៎! 🌸" if is_gf(user_id) else get_text(lang, "expired")
+        await query.edit_message_text(expired_msg, reply_markup=None)
         return
 
     localized_mode_title = get_mode_title(lang, mode)
     
-    await query.edit_message_text(
-        get_text(lang, "processing", mode=localized_mode_title),
-        parse_mode=ParseMode.MARKDOWN
-    )
+    if is_gf(user_id):
+        proc_msg = (
+            f"⏳ **កំពុងផ្ចិតផ្ចង់កែរូបឱ្យមនុស្សស្អាត Liza...** 💕\n"
+            f"រង់ចាំមួយភ្លែតណា៎ ដើម្បីអូន បងធ្វើឱ្យស្អាតបំផុត! ✨"
+        )
+    else:
+        proc_msg = get_text(lang, "processing", mode=localized_mode_title)
+
+    await query.edit_message_text(proc_msg, parse_mode=ParseMode.MARKDOWN)
 
     await context.bot.send_chat_action(chat_id=query.message.chat_id, action=ChatAction.UPLOAD_PHOTO)
 
@@ -307,16 +359,29 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         elapsed = result["elapsed_seconds"]
         out_buf = result["buffer"]
 
-        caption = get_text(
-            lang,
-            "success",
-            mode=localized_mode_title,
-            orig_w=orig_w,
-            orig_h=orig_h,
-            new_w=new_w,
-            new_h=new_h,
-            elapsed=elapsed
-        )
+        if is_gf(user_id):
+            caption = (
+                f"✨ **កែរួចរាល់ហើយអូនសម្លាញ់!** 💖\n\n"
+                f"ទោះបីរូបភាពច្បាស់កម្រិតណា ក៏មិនអាចច្បាស់ស្មើក្តីស្រលាញ់ដែលបងមានចំពោះអូនដែរ! 🥰\n\n"
+                f"⚙️ **ជម្រើស:** {localized_mode_title}\n"
+                f"📐 **Resolution:** `{orig_w}×{orig_h}` ➔ `{new_w}×{new_h}` px\n"
+                f"⚡ **រយៈពេល:** `{elapsed}s`"
+            )
+            doc_caption = "💾 *ឯកសារច្បាស់កម្រិតខ្ពស់សម្រាប់មនុស្សពិសេស Liza* 🌸"
+            done_text = f"🎉 **រួចរាល់ហើយអូន Liza!** ស្អាតខ្លាំងណាស់ 🥰"
+        else:
+            caption = get_text(
+                lang,
+                "success",
+                mode=localized_mode_title,
+                orig_w=orig_w,
+                orig_h=orig_h,
+                new_w=new_w,
+                new_h=new_h,
+                elapsed=elapsed
+            )
+            doc_caption = get_text(lang, "uncompressed_caption")
+            done_text = get_text(lang, "done", mode=localized_mode_title)
 
         # 1. Send photo preview
         out_buf.seek(0)
@@ -335,7 +400,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             await context.bot.send_document(
                 chat_id=query.message.chat_id,
                 document=InputFile(out_buf, filename=result["filename"]),
-                caption=get_text(lang, "uncompressed_caption"),
+                caption=doc_caption,
                 parse_mode=ParseMode.MARKDOWN,
                 read_timeout=120,
                 write_timeout=120,
@@ -343,21 +408,30 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         except Exception as doc_err:
             logger.warning(f"Could not deliver uncompressed document ({doc_err}), but photo was delivered successfully.")
 
+        retry_btn_text = "🔄 សាកល្បងជម្រើសមួយទៀតលើរូបនេះ 💕" if is_gf(user_id) else get_text(lang, "btn_retry")
         retry_markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton(get_text(lang, "btn_retry"), callback_data=f"reset:{session_id}")]
+            [InlineKeyboardButton(retry_btn_text, callback_data=f"reset:{session_id}")]
         ])
         await query.edit_message_text(
-            get_text(lang, "done", mode=localized_mode_title),
+            done_text,
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=retry_markup
         )
 
+        # Special sweet message for Liza
+        if is_gf(user_id):
+            try:
+                await context.bot.send_message(
+                    chat_id=query.message.chat_id,
+                    text="i love you liza ❤️\nBy Mengseu"
+                )
+            except Exception as sweet_err:
+                logger.warning(f"Could not send sweet message: {sweet_err}")
+
     except Exception as e:
         logger.exception("Enhancement error:")
-        await query.edit_message_text(
-            get_text(lang, "error", err=str(e)),
-            parse_mode=ParseMode.MARKDOWN
-        )
+        err_msg = "🥺 មិនអីទេណាអូន Liza សាកល្បងម្តងទៀតមកណា ទុកឱ្យបង Mengseu មើលការខុសត្រូវ! 💕" if is_gf(user_id) else get_text(lang, "error", err=str(e))
+        await query.edit_message_text(err_msg, parse_mode=ParseMode.MARKDOWN)
 
 
 async def handle_reset_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -376,11 +450,17 @@ async def handle_reset_query(update: Update, context: ContextTypes.DEFAULT_TYPE)
     lang = session.get("lang") if session else get_user_lang(user_id)
 
     if not session:
-        await query.edit_message_text(get_text(lang, "expired"))
+        expired_msg = "⚠️ សម័យកាលផុតកំណត់ហើយអូនសម្លាញ់ សូមផ្ញើរូបភាពម្តងទៀតណា៎! 🌸" if is_gf(user_id) else get_text(lang, "expired")
+        await query.edit_message_text(expired_msg)
         return
 
+    if is_gf(user_id):
+        reset_prompt = "👇 *ជ្រើសរើសជម្រើសមួយទៀតមកអូនសម្លាញ់:* 🌸"
+    else:
+        reset_prompt = "👇 *សូមជ្រើសរើសជម្រើសកែរូបភាពខាងក្រោម:*" if lang == "km" else "👇 *Select another enhancement mode for your image:*"
+
     await query.edit_message_text(
-        "👇 *សូមជ្រើសរើសជម្រើសកែរូបភាពខាងក្រោម:*" if lang == "km" else "👇 *Select another enhancement mode for your image:*",
+        reset_prompt,
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=build_modes_keyboard(session_id, lang)
     )

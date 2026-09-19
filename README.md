@@ -29,7 +29,26 @@ A Telegram bot that turns blurry, noisy, or low-resolution images into crisp HD 
 
 ---
 
-## 🚀 របៀបដំណើរការ / How to Run
+## 🐳 របៀបដំណើរការជាមួយ Docker Compose (Deploy with Docker)
+
+### 1. បង្កើត និងដំណើរការ Container (Build & Run in Background):
+```bash
+docker compose up -d --build
+```
+
+### 2. មើលដំណើរការ Logs របស់ Bot (View Live Logs):
+```bash
+docker compose logs -f
+```
+
+### 3. បញ្ឈប់ដំណើរការ Bot (Stop Container):
+```bash
+docker compose down
+```
+
+---
+
+## 🚀 របៀបដំណើរការធម្មតា / Local Run (Without Docker)
 
 ### In Git Bash:
 ```bash

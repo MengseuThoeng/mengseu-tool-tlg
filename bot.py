@@ -114,6 +114,9 @@ def build_modes_keyboard(session_id: str, lang: str) -> InlineKeyboardMarkup:
             InlineKeyboardButton(get_text(lang, "btn_2x"), callback_data=f"enh:{session_id}:realesrgan_2x"),
         ],
         [
+            InlineKeyboardButton(get_text(lang, "btn_remove_bg"), callback_data=f"enh:{session_id}:remove_bg"),
+        ],
+        [
             InlineKeyboardButton(get_text(lang, "btn_auto"), callback_data=f"enh:{session_id}:auto"),
             InlineKeyboardButton(get_text(lang, "btn_hdr"), callback_data=f"enh:{session_id}:vibrant"),
         ],
@@ -360,13 +363,21 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         out_buf = result["buffer"]
 
         if is_gf(user_id):
-            caption = (
-                f"✨ **កែរួចរាល់ហើយអូនសម្លាញ់!** 💖\n\n"
-                f"ទោះបីរូបភាពច្បាស់កម្រិតណា ក៏មិនអាចច្បាស់ស្មើក្តីស្រលាញ់ដែលបងមានចំពោះអូនដែរ! 🥰\n\n"
-                f"⚙️ **ជម្រើស:** {localized_mode_title}\n"
-                f"📐 **Resolution:** `{orig_w}×{orig_h}` ➔ `{new_w}×{new_h}` px\n"
-                f"⚡ **រយៈពេល:** `{elapsed}s`"
-            )
+            if mode == "remove_bg":
+                caption = (
+                    f"✨ **លុបផ្ទៃខាងក្រោយរួចរាល់ហើយអូន Liza!** 💖\n\n"
+                    f"ទោះគ្មាន background ក៏អូននៅតែស្អាតដាច់គេក្នុងពិភពលោក! 🥰🌸\n\n"
+                    f"📐 **Resolution:** `{new_w}×{new_h}` px\n"
+                    f"⚡ **រយៈពេល:** `{elapsed}s`"
+                )
+            else:
+                caption = (
+                    f"✨ **កែរួចរាល់ហើយអូនសម្លាញ់!** 💖\n\n"
+                    f"ទោះបីរូបភាពច្បាស់កម្រិតណា ក៏មិនអាចច្បាស់ស្មើក្តីស្រលាញ់ដែលបងមានចំពោះអូនដែរ! 🥰\n\n"
+                    f"⚙️ **ជម្រើស:** {localized_mode_title}\n"
+                    f"📐 **Resolution:** `{orig_w}×{orig_h}` ➔ `{new_w}×{new_h}` px\n"
+                    f"⚡ **រយៈពេល:** `{elapsed}s`"
+                )
             doc_caption = "💾 *ឯកសារច្បាស់កម្រិតខ្ពស់សម្រាប់មនុស្សពិសេស Liza* 🌸"
             done_text = f"🎉 **រួចរាល់ហើយអូន Liza!** ស្អាតខ្លាំងណាស់ 🥰"
         else:
@@ -485,6 +496,13 @@ def main():
         print("✅ Real-ESRGAN neural engine ready!")
     except Exception as e:
         print(f"⚠️ Note: Could not preload model ({e}), will load on first request.")
+
+    try:
+        print("✂️ Preloading Background Removal (rembg) model...")
+        ImageEnhancer.get_rembg_session()
+        print("✅ Background Removal engine ready!")
+    except Exception as e:
+        print(f"⚠️ Note: Could not preload rembg model ({e}), will load on first request.")
 
     # Generous HTTP timeouts to handle uploading large/upscaled files over mobile networks
     request_config = HTTPXRequest(

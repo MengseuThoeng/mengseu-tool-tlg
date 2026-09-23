@@ -13,6 +13,12 @@ try:
 except ImportError:
     ort = None
 
+try:
+    from rembg import remove as rembg_remove, new_session as rembg_new_session
+except ImportError:
+    rembg_remove = None
+    rembg_new_session = None
+
 MODEL_DIR = os.path.join(os.path.dirname(__file__), "models")
 MODEL_FILENAME = "realesr-general-x4v3.onnx"
 MODEL_PATH = os.path.join(MODEL_DIR, MODEL_FILENAME)
@@ -23,10 +29,12 @@ class ImageEnhancer:
     """
     State-of-the-art Image Enhancement engine featuring:
     1. Real-ESRGAN Deep Learning Super-Resolution (Deblur, Denoise & 4x Hallucinated Details).
-    2. Adaptive local computer vision filters (CLAHE, Bilateral, HDR).
+    2. AI Background Removal (rembg / u2netp transparent PNG).
+    3. Adaptive local computer vision filters (CLAHE, Bilateral, HDR).
     """
 
     _ort_session: Optional[Any] = None
+    _rembg_session: Optional[Any] = None
 
     MODES = {
         "realesrgan_4x": {
@@ -48,6 +56,10 @@ class ImageEnhancer:
         "sharpen": {
             "title": "🔍 Edge Sharpen & Denoise",
             "desc": "Fast edge-preserving bilateral filter and crisp texture sharpen."
+        },
+        "remove_bg": {
+            "title": "✂️ Remove Background",
+            "desc": "AI background cutout with transparent PNG output."
         }
     }
 
@@ -74,6 +86,33 @@ class ImageEnhancer:
                 providers.insert(0, 'DmlExecutionProvider')
             cls._ort_session = ort.InferenceSession(model_path, providers=providers)
         return cls._ort_session
+
+    @classmethod
+    def get_rembg_session(cls):
+        """Lazy loader for rembg session with lightweight u2netp model (~4.5MB)."""
+        if cls._rembg_session is None and rembg_new_session is not None:
+            try:
+                cls._rembg_session = rembg_new_session("u2netp")
+            except Exception as e:
+                print(f"Warning: could not create u2netp rembg session ({e}), will use default.")
+        return cls._rembg_session
+
+    @classmethod
+    def remove_background(cls, image_bytes: bytes) -> io.BytesIO:
+        """Remove background using AI segmentation and return transparent PNG buffer."""
+        pil_img = Image.open(io.BytesIO(image_bytes))
+        sess = cls.get_rembg_session()
+        if sess is not None and rembg_remove is not None:
+            out_img = rembg_remove(pil_img, session=sess)
+        elif rembg_remove is not None:
+            out_img = rembg_remove(pil_img)
+        else:
+            raise RuntimeError("rembg library is not installed.")
+
+        buf = io.BytesIO()
+        out_img.save(buf, format="PNG")
+        buf.seek(0)
+        return buf
 
     @staticmethod
     def _bytes_to_cv2(image_bytes: bytes) -> Tuple[np.ndarray, bool]:
@@ -258,7 +297,23 @@ class ImageEnhancer:
         cv_img, has_alpha = cls._bytes_to_cv2(image_bytes)
         orig_h, orig_w = cv_img.shape[:2]
 
-        if mode == "realesrgan_4x":
+        if mode == "remove_bg":
+            out_buffer = cls.remove_background(image_bytes)
+            out_pil = Image.open(out_buffer)
+            new_w, new_h = out_pil.size
+            out_buffer.seek(0)
+            elapsed = round(time.time() - start_time, 2)
+            mode_info = cls.MODES.get(mode, {"title": "✂️ Remove Background"})
+            return {
+                "buffer": out_buffer,
+                "format": "PNG",
+                "filename": f"removed_bg_{int(time.time())}.png",
+                "original_size": (orig_w, orig_h),
+                "new_size": (new_w, new_h),
+                "elapsed_seconds": elapsed,
+                "mode_title": mode_info["title"]
+            }
+        elif mode == "realesrgan_4x":
             result_img = cls.enhance_realesrgan(cv_img, scale=4)
         elif mode == "realesrgan_2x":
             result_img = cls.enhance_realesrgan(cv_img, scale=2)

